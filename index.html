@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InstantLaunch</title>
+
+  <!-- Manifest PWA d'InstantLaunch -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Icônes (ajoutez vos icônes réelles) -->
+  <link rel="icon" href="/icons/icon-32.png" sizes="32x32">
+  <meta name="theme-color" content="#1f2937">
+
+  <!-- Tailwind via CDN (pour prototype) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Register service worker -->
+  <script type="module" src="/register-sw.js"></script>
+
+  <style>
+    /* Petite personnalisation */
+    body { background: linear-gradient(180deg,#0f172a,#071035); }
+  </style>
+</head>
+<body class="min-h-screen text-gray-100 antialiased">
+  <header class="max-w-5xl mx-auto py-8 px-4 flex items-center justify-between">
+    <h1 class="text-3xl font-semibold">InstantLaunch</h1>
+    <div class="flex items-center gap-3">
+      <button id="install-instant-btn" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-2 rounded">Installer InstantLaunch</button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4">
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Card d'exemple pour une app -->
+      <div class="bg-slate-800 rounded-lg p-4">
+        <div class="flex items-center gap-3">
+          <img src="/icons/app1-96.png" alt="App 1" class="w-16 h-16 rounded-md object-cover">
+          <div>
+            <h2 class="text-lg font-medium">AppWeb — Notes</h2>
+            <p class="text-sm text-gray-300">Bloc-notes en ligne simple.</p>
+          </div>
+        </div>
+
+        <div class="mt-4 flex gap-2">
+          <!-- Ouvrir l'app -->
+          <a href="https://example-app1.example.com" target="_blank" rel="noopener" class="flex-1 text-center bg-slate-700 hover:bg-slate-600 py-2 rounded">Ouvrir</a>
+
+          <!-- Installer l'app (tentative) -->
+          <button
+            class="install-app-btn flex-1 text-center bg-emerald-600 hover:bg-emerald-500 py-2 rounded"
+            data-app-url="https://example-app1.example.com"
+          >
+            Installer (PWA)
+          </button>
+        </div>
+      </div>
+
+      <!-- Répétez pour d'autres apps -->
+      <div class="bg-slate-800 rounded-lg p-4">
+        <div class="flex items-center gap-3">
+          <img src="/icons/app2-96.png" alt="App 2" class="w-16 h-16 rounded-md object-cover">
+          <div>
+            <h2 class="text-lg font-medium">Mini Calc</h2>
+            <p class="text-sm text-gray-300">Calculatrice avancée.</p>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <a href="https://example-app2.example.com" target="_blank" rel="noopener" class="flex-1 text-center bg-slate-700 hover:bg-slate-600 py-2 rounded">Ouvrir</a>
+          <button class="install-app-btn flex-1 text-center bg-emerald-600 hover:bg-emerald-500 py-2 rounded" data-app-url="https://example-app2.example.com">Installer (PWA)</button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    // Gestion de l'installation d'InstantLaunch lui-même
+    let deferredPromptInstant = null;
+    const installInstantBtn = document.getElementById('install-instant-btn');
+    installInstantBtn.style.display = 'none';
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Empêche l'affichage automatique et conserve l'événement
+      e.preventDefault();
+      deferredPromptInstant = e;
+      installInstantBtn.style.display = 'inline-block';
+    });
+
+    installInstantBtn.addEventListener('click', async () => {
+      if (!deferredPromptInstant) return;
+      deferredPromptInstant.prompt();
+      const choice = await deferredPromptInstant.userChoice;
+      deferredPromptInstant = null;
+      installInstantBtn.style.display = 'none';
+      console.log('InstantLaunch install choice:', choice);
+    });
+
+    // Tentative d'installation d'apps externes :
+    // Limitation importante : pour déclencher le prompt d'installation d'une autre origine,
+    // l'origine cible doit avoir déclenché beforeinstallprompt dans sa propre page et
+    // exposer ce prompt à son contexte. Ici on ouvre simplement l'URL et transmet un hint.
+    // Une approche réaliste : ouvrir l'app dans un popup et demander à l'utilisateur d'installer là-bas.
+    document.querySelectorAll('.install-app-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const url = btn.dataset.appUrl;
+        // Ouvrir l'app dans une nouvelle fenêtre/onglet (ou popup)
+        const w = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!w) {
+          alert('Impossible d’ouvrir l’app. Désactivez votre bloqueur de popups.');
+          return;
+        }
+        // Optionnel : envoyer un message postMessage pour indiquer que l'utilisateur veut installer.
+        // L'app distante doit écouter ce message et déclencher son propre prompt.
+        const installMessage = { type: 'instantlaunch-install-request' };
+        // Réessaye d'envoyer le message après quelque temps pour laisser la page se charger.
+        setTimeout(() => {
+          try {
+            w.postMessage(installMessage, new URL(url).origin);
+          } catch (err) {
+            console.warn('postMessage failed', err);
+          }
+        }, 1000);
+      });
+    });
+
+    // Ecouter réponses si l'app distante renvoie un message
+    window.addEventListener('message', (ev) => {
+      // vérifiez l'origine si nécessaire
+      const data = ev.data || {};
+      if (data?.type === 'instantlaunch-install-prompt-shown') {
+        alert('L’app a affiché son prompt d’installation dans la nouvelle fenêtre.');
+      }
+    });
+  </script>
+</body>
+</html>
