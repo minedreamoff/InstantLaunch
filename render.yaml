@@ -4,6 +4,3 @@ services:
     env: static
     buildCommand: echo "Static site"
     staticPublishPath: ./
-    routes:
-      - path: /
-        matchType: prefix
